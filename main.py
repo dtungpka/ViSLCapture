@@ -219,18 +219,12 @@ class MainWindow(tk.Tk):
         
         self.depth_frame = tk.Label(self, width=640, height=480)
         self.depth_frame.grid(row=0, column=1, sticky="nsew")
-
-        #create a frame to hold the timeline (scrollable)
-        timeline_frame = tk.Frame(self)
-        timeline_frame.grid(row=1, column=0, columnspan=3, sticky="nsew")
-        #add a hrizontal scrollbar on the bottom that take 
-
         
 
 
         # Create a frame to hold the buttons
         button_frame = tk.Frame(self)
-        button_frame.grid(row=1, column=1, columnspan=3, pady=10)
+        button_frame.grid(row=1, column=0, columnspan=2, pady=10)
 
         # Create the discard button
         self.discard_button = tk.Button(button_frame, text="Discard", command=self.discard_video, bg="yellow", height=2, width=10)
@@ -242,14 +236,16 @@ class MainWindow(tk.Tk):
 
 
         self.timeline_label = tk.Label(self, text="Waiting for configuration...")
-        self.timeline_label.grid(row=1, column=2, columnspan=3, )
+        self.timeline_label.grid(row=1, column=1, columnspan=2, )
         self.timeline_label.config(font=("Courier", 20))
         self.timeline_label.config(anchor="center")
         self.timeline_label.config(justify="center")
         self.timeline_label.config(wraplength=1280)
 
-        
+
         self.bind("<space>", self.capture_video)
+        #bing delete key to discard video
+        self.bind("<Delete>", self.discard_video)
         
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
@@ -264,6 +260,7 @@ class MainWindow(tk.Tk):
         self.bag_size = 0
 
     def init_camera(self,save_img=True,enable_view=True,):
+        #set RS2_OPTION_AUTO_EXPOSURE_PRIORITY to 0
         self.filename = self.name
         if '.bag' not in self.filename.lower():
             self.filename += '.bag'
@@ -284,6 +281,9 @@ class MainWindow(tk.Tk):
             os.makedirs(self.depthpath,exist_ok=True)
         self.pipeline = rs.pipeline()
         self.config = rs.config()
+        #RS2_OPTION_AUTO_EXPOSURE_PRIORITY
+        
+        
         rgb_res = Config.get("rs_rgb_resolution")
         depth_res = Config.get("rs_depth_resolution")
         rgb_fps = Config.get("rs_rgb_fps")
@@ -293,6 +293,10 @@ class MainWindow(tk.Tk):
         self.config.enable_stream(rs.stream.depth,  depth_res[0], depth_res[1], rs.format.z16, depth_fps)
         self.config.enable_record_to_file(os.path.join(self.savepath,self.filename))
         self.profile = self.pipeline.start(self.config)
+        self.device = self.profile.get_device()
+        sensor = self.device.first_depth_sensor()
+        #sensor.set_option(rs.option.auto_exposure_mode,0)
+
         print("Recorder initialized")
         intr = self.profile.get_stream(rs.stream.color).as_video_stream_profile().get_intrinsics()
         print(intr.width, intr.height, intr.fx, intr.fy, intr.ppx, intr.ppy)
@@ -341,11 +345,11 @@ class MainWindow(tk.Tk):
         self.current_timestamp = color_frame.get_timestamp()
         color_image = np.asanyarray(color_frame.get_data())
         depth_frame = aligned_frames.get_depth_frame()
-        depth_frame = rs.decimation_filter(1).process(depth_frame)
+        #depth_frame = rs.decimation_filter(1).process(depth_frame)
         #depth_frame = rs.disparity_transform(True).process(depth_frame)
         #depth_frame = rs.spatial_filter().process(depth_frame)
-        #depth_frame = rs.temporal_filter().process(depth_frame)
-        depth_frame = rs.disparity_transform(False).process(depth_frame)
+        depth_frame = rs.temporal_filter().process(depth_frame)
+        #depth_frame = rs.disparity_transform(False).process(depth_frame)
         # depth_frame = rs.hole_filling_filter().process(depth_frame)
         depth_image = np.asanyarray(depth_frame.get_data())
         #color_image1 = cv2.cvtColor(color_image, cv2.COLOR_RGB2BGR)
@@ -354,7 +358,9 @@ class MainWindow(tk.Tk):
         #add timeline label to color image
         #cv2.putText(color_image,self.get_timeline_label(),(10,30),cv2.FONT_HERSHEY_SIMPLEX,1,(255,255,255),2)
         depth_color_image = cv2.cvtColor(depth_color_image, cv2.COLOR_BGR2RGB)
-
+        if time.time()-_st_time > 0.05:
+            print(f"Time to get frame: {time.time()-_st_time:.2f}")
+        _st_time = time.time()
         # Convert the images to PIL format...
         image = Image.fromarray(color_image)
         depth_image = Image.fromarray(depth_color_image)
@@ -362,12 +368,18 @@ class MainWindow(tk.Tk):
         # ...and then to ImageTk format
         imagetk = ImageTk.PhotoImage(image=image)
         depth_imagetk = ImageTk.PhotoImage(image=depth_image)
+        if time.time()-_st_time > 0.05:
+            print(f"Time to convert to ImageTk: {time.time()-_st_time:.2f}")
+        _st_time = time.time()
 
         # Update the canvas
         self.rgb_frame.configure(image=imagetk)
         self.depth_frame.configure(image=depth_imagetk)
         self.rgb_frame.image = imagetk
         self.depth_frame.image = depth_imagetk
+        if time.time()-_st_time > 0.05:
+            print(f"Time to update frame: {time.time()-_st_time:.2f}")
+
         #print(f"FPS: {1/(time.time()-_st_time):.2f}")
         self.timeline_label.config(text=self.get_timeline_label())
         self.current_frame += 1
