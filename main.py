@@ -8,18 +8,56 @@ import numpy as np
 import os
 import time
 import sys
+import yaml
+
+class Config:
+    running = True
+    config_file_path = "config/config.yaml"
+    config = None
+    def __init__(self):
+        #if config file is not None, load the config file, else create a new one
+        if os.path.exists(Config.config_file_path): 
+            Config.load()
+        else:
+            Config.config = {
+                "save_location": os.path.join(os.getcwd(), "output"),
+                "name": "A0P0",
+                "range": 10,
+                "icon": "config/Nahida_2.ico",
+                "action_map": "config/maps.txt"
+            }
+            Config.save()
+    def save():
+        with open("config.yaml", "w") as f:
+            yaml.dump(Config.config_file_path, f, default_flow_style=False)
+    def load():
+        with open(Config.config_file_path, "r") as f:
+            Config.config = yaml.load(f, Loader=yaml.FullLoader)
+    def get(key):
+        return Config.config[key]
+    def set(key, value):
+        Config.config[key] = value
+        Config.save()
+
+
+
 
 class SubWindow(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
         self.title("Configuration")
+        self.actions_list = {}
         #set icon
-        self.iconbitmap('Nahida_2.ico')
+        self.iconbitmap(Config.get("icon"))
         self.geometry("400x200")  # Set the desired dimensions
         self.resizable(False, False)  # Disable resizing
         self.parent = parent
-        default_save_location = os.path.join(os.getcwd(), "output")
-        
+        default_save_location = Config.get("save_location")
+        if os.path.exists(default_save_location):
+            self.datas = os.listdir(default_save_location)
+        else :
+            os.makedirs(default_save_location)
+            self.datas = os.listdir(default_save_location)
         self.save_location_label = tk.Label(self, text="Save Location:")
         self.save_location_label.pack()
         
@@ -28,19 +66,31 @@ class SubWindow(tk.Toplevel):
         self.save_location_entry.pack()
 
         
+
         
-        self.name_label = tk.Label(self, text="Name:")
+        
+        self.name_label = tk.Label(self, text="ID:") #A0P0
         self.name_label.pack()
         
         self.name_entry = tk.Entry(self, width=50)
         self.name_entry.pack()
+
+        #action_name
+        self.action_name_label = tk.Label(self, text="Action Name:")
+        self.action_name_label.pack()
+        self.action_name_entry = tk.Entry(self, width=50)
+        self.action_name_entry.pack()
+
+
+
+
         print(default_save_location)
         if os.path.exists(default_save_location):
-            datas = os.listdir(default_save_location)
-            print(datas)
+            self.datas = os.listdir(default_save_location)
+            print(self.datas)
             last_action = 0
             last_person = 0
-            for data in datas:
+            for data in self.datas:
                 if os.path.isdir(os.path.join(default_save_location,data)):
                     _action,_person = data.replace('A','').split("P")
                     #convert to int
@@ -56,7 +106,10 @@ class SubWindow(tk.Toplevel):
             if last_action != 0 and last_person != 0:
                 self.name_entry.insert(0, f"A{last_action}P{last_person+1}")
 
-
+        #add trigger to action_name_entry and name_entry when value is changed
+        self.action_name_entry.bind("<KeyRelease>",self.update_action_name)
+        self.name_entry.bind("<KeyRelease>",self.update_name)
+            
 
 
 
@@ -69,21 +122,89 @@ class SubWindow(tk.Toplevel):
         
         self.range_entry = tk.Entry(self, width=50)
         self.range_entry.pack()
-        self.range_entry.insert(0, 11)
+        self.range_entry.insert(0, Config.get("range"))
         
         self.confirm_button = tk.Button(self, text="Confirm", command=self.confirm)
         self.confirm_button.pack()
+
+        self.update_name(None)
+        self.update_action_name(None)
+
+        #move the window to the center of the screen
+        self.update()
+        self.geometry(f"+{int(self.winfo_screenwidth()/2 - self.winfo_width()/2)}+{int(self.winfo_screenheight()/2 - self.winfo_height()/2)}")
+        self.update()
+
+
+    def load_action_name(self):
+        if self.actions_list == {}:
+            with open(Config.get("action_map"), "r",encoding='utf-8') as f:
+                for line in f:
+                    action, name = line.strip().split(" => ")
+                    self.actions_list[action] = name
+        action_name = '[Insert action]'
+        input_id = self.name_entry.get()
+        if "A" in input_id and "P" in input_id:
+            action = input_id.split("P")[0]
+            if action in self.actions_list:
+                action_name = self.actions_list[action]
+        return action_name
+    
+    def update_name(self,event): #name of action A00P00
+
+        action_name = self.load_action_name()
+        if action_name == '[Insert action]' and self.action_name_entry.get() != '[Insert action]' and not  self.action_name_entry.get() in self.actions_list.values():
+            action_name = self.action_name_entry.get()
+        self.action_name_entry.delete(0,tk.END)
+        self.action_name_entry.insert(0,action_name)
+
+    def update_action_name(self,event): #name of action [Insert action]
+        actionID = None
+        for action, name in self.actions_list.items():
+            if name == self.action_name_entry.get():
+                actionID = action
+                break
+        all_ap = {}
+        for data in self.datas:
+            if data.split("P")[0] not in all_ap:
+                all_ap[data.split("P")[0]] = int(data.split("P")[1])
+            else:
+                all_ap[data.split("P")[0]] = max(all_ap[data.split("P")[0]],int(data.split("P")[1]))
+        #print(all_ap)
+        if actionID is None:
+            #print(all_ap.keys())
+            actionID = f"A{max([int(action[1:]) for action in all_ap.keys()]) + 1}"
+            all_ap[actionID] = 0
+        if actionID not in all_ap:
+            all_ap[actionID] = 0
+        self.name_entry.delete(0,tk.END)
+        self.name_entry.insert(0,f"{actionID}P{all_ap[actionID]+1}")
+
+
+    def save_action_name(self):
+        name_entry = self.name_entry.get()
+        action_name = self.action_name_entry.get()
+        action = name_entry.split("P")[0]
+        self.actions_list[action] = action_name
+        with open(Config.get("action_map"), "w",encoding='utf-8') as f:
+            for action, name in self.actions_list.items():
+                f.write(f"{action} => {name}\n")
+
+        
+
         
     def confirm(self):
         self.parent.set_parameters(self.save_location_entry.get(), self.name_entry.get(), self.range_entry.get())
+        self.save_action_name()
         #close the window
+        Config.save()
         self.destroy()
 
 class MainWindow(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("D455 Capture")
-        self.iconbitmap('Nahida_2.ico')
+        self.iconbitmap(Config.get("icon"))
         self.geometry("1480x680")  # Set the correct dimensions
         
         self.rgb_frame = tk.Label(self, width=640, height=480)
@@ -91,9 +212,18 @@ class MainWindow(tk.Tk):
         
         self.depth_frame = tk.Label(self, width=640, height=480)
         self.depth_frame.grid(row=0, column=1, sticky="nsew")
-        
-        self.capture_button = tk.Button(self, text="Capture", command=self.capture_video, bg="green")
-        self.capture_button.grid(row=1, column=0, columnspan=2, pady=10)
+
+        # Create a frame to hold the buttons
+        button_frame = tk.Frame(self)
+        button_frame.grid(row=1, column=0, columnspan=2, pady=10)
+
+        # Create the discard button
+        self.discard_button = tk.Button(button_frame, text="Discard", command=self.discard_video, bg="red", height=2, width=10)
+        self.discard_button.pack(side=tk.LEFT, padx=5)
+
+        # Create the capture button
+        self.capture_button = tk.Button(button_frame, text="Capture", command=self.capture_video, bg="green", height=2, width=10)
+        self.capture_button.pack(side=tk.LEFT, padx=5)
 
 
         self.timeline_label = tk.Label(self, text="Waiting for configuration...")
@@ -172,7 +302,7 @@ class MainWindow(tk.Tk):
         print("Setting parameters...")
         self.save_location = save_location
         self.name = name
-        self.range = int(range) 
+        self.range = int(range) + 1 
         self.init_camera()
         self.update_frame()
 
@@ -256,6 +386,7 @@ class MainWindow(tk.Tk):
     def destroy(self):
         if self.is_initiated:
             self.pipeline.stop()
+        Config.running = False
         super().destroy()
     
     def capture_video(self, event=None):
@@ -266,10 +397,15 @@ class MainWindow(tk.Tk):
         #set the capture button to red
         self.capture_button.config(bg="red")
         self.set_timeline_keypoint(self.current_frame,"capture",self.current_timestamp)
-        
+    def discard_video(self, event=None):
+        print("Discarding video...")
+        self.set_timeline_keypoint(self.current_frame,"discard",self.current_timestamp)
+        pass
 
 if __name__ == "__main__":
-    window = MainWindow()
-    subwindow = SubWindow(window)
-    subwindow.mainloop()
-    window.mainloop()
+    while Config.running:
+        Config()
+        window = MainWindow()
+        subwindow = SubWindow(window)
+        subwindow.mainloop()
+        window.mainloop()
