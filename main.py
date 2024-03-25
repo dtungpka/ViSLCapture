@@ -10,6 +10,9 @@ import time
 import sys
 import yaml
 
+
+
+
 class Config:
     running = True
     config_file_path = "config/config.yaml"
@@ -24,14 +27,18 @@ class Config:
                 "name": "A0P0",
                 "range": 10,
                 "icon": "config/Nahida_2.ico",
-                "action_map": "config/maps.txt"
+                "action_map": "config/maps.txt",
+                "rs_rgb_resolution": [640,480],
+                "rs_depth_resolution": [640,480],
+                "rs_rgb_fps": 30,
+                "rs_depth_fps": 30,
             }
             Config.save()
     def save():
-        with open("config.yaml", "w") as f:
-            yaml.dump(Config.config_file_path, f, default_flow_style=False)
+        with open(Config.config_file_path, "w",encoding='utf-8') as f:
+            yaml.dump(Config.config, f, default_flow_style=False)
     def load():
-        with open(Config.config_file_path, "r") as f:
+        with open(Config.config_file_path, "r",encoding='utf-8') as f:
             Config.config = yaml.load(f, Loader=yaml.FullLoader)
     def get(key):
         return Config.config[key]
@@ -213,12 +220,20 @@ class MainWindow(tk.Tk):
         self.depth_frame = tk.Label(self, width=640, height=480)
         self.depth_frame.grid(row=0, column=1, sticky="nsew")
 
+        #create a frame to hold the timeline (scrollable)
+        timeline_frame = tk.Frame(self)
+        timeline_frame.grid(row=1, column=0, columnspan=3, sticky="nsew")
+        #add a hrizontal scrollbar on the bottom that take 
+
+        
+
+
         # Create a frame to hold the buttons
         button_frame = tk.Frame(self)
-        button_frame.grid(row=1, column=0, columnspan=2, pady=10)
+        button_frame.grid(row=1, column=1, columnspan=3, pady=10)
 
         # Create the discard button
-        self.discard_button = tk.Button(button_frame, text="Discard", command=self.discard_video, bg="red", height=2, width=10)
+        self.discard_button = tk.Button(button_frame, text="Discard", command=self.discard_video, bg="yellow", height=2, width=10)
         self.discard_button.pack(side=tk.LEFT, padx=5)
 
         # Create the capture button
@@ -227,7 +242,7 @@ class MainWindow(tk.Tk):
 
 
         self.timeline_label = tk.Label(self, text="Waiting for configuration...")
-        self.timeline_label.grid(row=1, column=1, columnspan=2, )
+        self.timeline_label.grid(row=1, column=2, columnspan=3, )
         self.timeline_label.config(font=("Courier", 20))
         self.timeline_label.config(anchor="center")
         self.timeline_label.config(justify="center")
@@ -269,8 +284,13 @@ class MainWindow(tk.Tk):
             os.makedirs(self.depthpath,exist_ok=True)
         self.pipeline = rs.pipeline()
         self.config = rs.config()
-        self.config.enable_stream(rs.stream.color, 640, 480, rs.format.rgb8, 30)
-        self.config.enable_stream(rs.stream.depth,  640, 480, rs.format.z16, 30)
+        rgb_res = Config.get("rs_rgb_resolution")
+        depth_res = Config.get("rs_depth_resolution")
+        rgb_fps = Config.get("rs_rgb_fps")
+        depth_fps = Config.get("rs_depth_fps")
+
+        self.config.enable_stream(rs.stream.color, rgb_res[0], rgb_res[1], rs.format.rgb8, rgb_fps)
+        self.config.enable_stream(rs.stream.depth,  depth_res[0], depth_res[1], rs.format.z16, depth_fps)
         self.config.enable_record_to_file(os.path.join(self.savepath,self.filename))
         self.profile = self.pipeline.start(self.config)
         print("Recorder initialized")
@@ -292,6 +312,8 @@ class MainWindow(tk.Tk):
         size = os.path.getsize(os.path.join(self.savepath,self.filename))
         self.bag_size = f"{size/1024/1024/1024:.2f}GB" if size > 1024*1024*1024 else f"{size/1024/1024:.2f}MB"
         return self.bag_size
+    def set_timeline_indicator(self):
+        pass
     def get_timeline_label(self):
         if len(self.timeline) == 0:
             return f"Ready to record {self.pose_name}|0/{self.pose_count-1} {0.00}% ({self.get_bag_size()})"
@@ -408,4 +430,5 @@ if __name__ == "__main__":
         window = MainWindow()
         subwindow = SubWindow(window)
         subwindow.mainloop()
+        Config.save()
         window.mainloop()

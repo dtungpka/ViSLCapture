@@ -1,0 +1,13 @@
+action_map: config/maps.txt
+icon: config/Nahida_2.ico
+name: A0P0
+range: 10
+rs_depth_fps: 30
+rs_depth_resolution:
+- 640
+- 480
+rs_rgb_fps: 30
+rs_rgb_resolution:
+- 640
+- 480
+save_location: D:\2023-2024\Project\Realsense\output
