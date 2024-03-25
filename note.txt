@@ -1,0 +1,1 @@
+pyinstaller --onefile -w -F --add-binary "Nahida_2.ico;." --icon=Nahida_2.ico main.py
