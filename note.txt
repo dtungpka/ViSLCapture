@@ -1,1 +1,2 @@
-pyinstaller --onefile -w -F --add-binary "Nahida_2.ico;." --icon=Nahida_2.ico main.py
+pyinstaller --onefile -w -F --icon=Nahida_2.ico main.py
+xcopy /s /i config output

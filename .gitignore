@@ -4,3 +4,5 @@ librealsense
 build
 vcpkg
 build
+dist
+image

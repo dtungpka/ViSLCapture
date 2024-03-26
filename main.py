@@ -167,6 +167,7 @@ class SubWindow(tk.Toplevel):
 
     def update_action_name(self,event): #name of action [Insert action]
         actionID = None
+        action = None
         for action, name in self.actions_list.items():
             if name == self.action_name_entry.get():
                 actionID = action
@@ -180,7 +181,10 @@ class SubWindow(tk.Toplevel):
         #print(all_ap)
         if actionID is None:
             #print(all_ap.keys())
-            actionID = f"A{max([int(action[1:]) for action in all_ap.keys()]) + 1}"
+            if all_ap == {}:
+                actionID = f"A{int(action[1:])+1}"
+            else:
+                actionID = f"A{max([int(action[1:]) for action in all_ap.keys()]) + 1}"
             all_ap[actionID] = 0
         if actionID not in all_ap:
             all_ap[actionID] = 0
@@ -210,7 +214,7 @@ class SubWindow(tk.Toplevel):
 class MainWindow(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("D455 Capture")
+        self.title("ViSL Capture")
         self.iconbitmap(Config.get("icon"))
         self.geometry("1480x680")  # Set the correct dimensions
         
@@ -246,6 +250,9 @@ class MainWindow(tk.Tk):
         self.bind("<space>", self.capture_video)
         #bing delete key to discard video
         self.bind("<Delete>", self.discard_video)
+
+        #bind esc key to close the window
+        self.bind("<Escape>", self.stop)
         
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
@@ -305,6 +312,7 @@ class MainWindow(tk.Tk):
         self.is_initiated = True
         self.current_frame = 0
         self.current_timestamp = 0
+        self.start_recording_time = time.time()
     def set_timeline_keypoint(self,frame:int,action:str,time_stamp:float=0):
         self.timeline.append((frame,action,time_stamp))
     def get_bag_size(self):
@@ -322,7 +330,7 @@ class MainWindow(tk.Tk):
         if len(self.timeline) == 0:
             return f"Ready to record {self.pose_name}|0/{self.pose_count-1} {0.00}% ({self.get_bag_size()})"
         else:
-            return f"Recording {self.pose_name}|{len(self.timeline)-1}/{self.pose_count-1} {len(self.timeline)/self.pose_count*100:.2f}% ({self.get_bag_size()})"
+            return f"Recording {self.pose_name}|{len(self.timeline)-1}/{self.pose_count-1} {((len(self.timeline))/(self.pose_count-1))*100:.2f}% ({self.get_bag_size()})"
  
     def set_parameters(self, save_location, name, range):
         print("Setting parameters...")
@@ -336,6 +344,8 @@ class MainWindow(tk.Tk):
         # Add code here to update the frame
         if time.time() - self.last_capture > 0.5:
             self.capture_button.config(bg="green")
+            self.discard_button.config(bg="yellow")
+            
         _st_time = time.time()
         
         frames = self.pipeline.wait_for_frames()
@@ -383,7 +393,7 @@ class MainWindow(tk.Tk):
         #print(f"FPS: {1/(time.time()-_st_time):.2f}")
         self.timeline_label.config(text=self.get_timeline_label())
         self.current_frame += 1
-        if len(self.timeline) >= int(self.range):
+        if len(self.timeline) >= int(self.range) :
             #save timeline
             with open(os.path.join(self.savepath,'timeline.txt'),'w') as f:
                 for frame,action,current_timestamp in self.timeline:
@@ -400,11 +410,12 @@ class MainWindow(tk.Tk):
             #show a message box
 
             
-            messagebox.showinfo("Recording completed!",f"Recording completed! {self.get_bag_size()}")
+            result = messagebox.askquestion("Recording completed!", f"Recording completed! {self.get_bag_size()}\nDo you want to continue?")
+            if result == 'yes':
+                self.destroy()
+            else:
+                self.stop()
 
-
-            self.destroy()
-            
             
 
         else:
@@ -415,12 +426,15 @@ class MainWindow(tk.Tk):
 
 
 
-
+    def stop(self, event=None):
+        Config.running = False
+        if self.is_initiated:
+            self.pipeline.stop()
+        super().destroy()
 
     def destroy(self):
         if self.is_initiated:
             self.pipeline.stop()
-        Config.running = False
         super().destroy()
     
     def capture_video(self, event=None):
@@ -433,6 +447,12 @@ class MainWindow(tk.Tk):
         self.set_timeline_keypoint(self.current_frame,"capture",self.current_timestamp)
     def discard_video(self, event=None):
         print("Discarding video...")
+        if time.time() - self.last_capture < 0.5:
+            return
+        self.last_capture = time.time()
+        self.discard_button.config(bg="red")
+        self.pose_count += 1
+        self.range += 1
         self.set_timeline_keypoint(self.current_frame,"discard",self.current_timestamp)
         pass
 
