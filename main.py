@@ -339,7 +339,7 @@ class MainWindow(tk.Tk):
     def set_parameters(self, save_location, name, range):
         #set main focus to the main window ,and maximize it (not fullscreen)
         self.focus_set()
-        self.attributes('-zoomed', True)
+        self.state('zoomed')
 
         
         print("Setting parameters...")
