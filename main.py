@@ -11,7 +11,7 @@ import sys
 import yaml
 
 
-
+VERSION = "1.1.1"
 
 class Config:
     running = True
@@ -186,9 +186,9 @@ class SubWindow(tk.Toplevel):
                 actionID = f"A{int(action[1:])+1}"
             else:
                 actionID = f"A{max([int(action[1:]) for action in all_ap.keys()]) + 1}"
-            all_ap[actionID] = Config.get("start_person") - 1
+            all_ap[actionID] = max(Config.get("start_person") - 1,0)
         if actionID not in all_ap:
-            all_ap[actionID] = Config.get("start_person") - 1
+            all_ap[actionID] = max(Config.get("start_person") - 1,0)
         self.name_entry.delete(0,tk.END)
         self.name_entry.insert(0,f"{actionID}P{all_ap[actionID]+1}")
 
@@ -218,7 +218,7 @@ class SubWindow(tk.Toplevel):
 class MainWindow(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("ViSL Capture")
+        self.title("ViSL Capture" + " v" + VERSION)
         self.iconbitmap(Config.get("icon"))
         self.geometry("1480x680")  # Set the correct dimensions
         
