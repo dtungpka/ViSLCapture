@@ -11,7 +11,7 @@ import sys
 import yaml
 
 
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 
 class Config:
     running = True
