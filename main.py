@@ -32,6 +32,7 @@ class Config:
                 "rs_depth_resolution": [640,480],
                 "rs_rgb_fps": 30,
                 "rs_depth_fps": 30,
+                "start_person": 0,
             }
             Config.save()
     def save():
@@ -185,9 +186,9 @@ class SubWindow(tk.Toplevel):
                 actionID = f"A{int(action[1:])+1}"
             else:
                 actionID = f"A{max([int(action[1:]) for action in all_ap.keys()]) + 1}"
-            all_ap[actionID] = 0
+            all_ap[actionID] = Config.get("start_person") - 1
         if actionID not in all_ap:
-            all_ap[actionID] = 0
+            all_ap[actionID] = Config.get("start_person") - 1
         self.name_entry.delete(0,tk.END)
         self.name_entry.insert(0,f"{actionID}P{all_ap[actionID]+1}")
 
@@ -205,6 +206,9 @@ class SubWindow(tk.Toplevel):
 
         
     def confirm(self):
+        if Config.get("start_person") == 0:
+            Config.set("start_person",int(self.name_entry.get().split("P")[1]))
+
         self.parent.set_parameters(self.save_location_entry.get(), self.name_entry.get(), self.range_entry.get())
         self.save_action_name()
         #close the window
@@ -330,9 +334,14 @@ class MainWindow(tk.Tk):
         if len(self.timeline) == 0:
             return f"Ready to record {self.pose_name}|0/{self.pose_count-1} {0.00}% ({self.get_bag_size()})"
         else:
-            return f"Recording {self.pose_name}|{len(self.timeline)-1}/{self.pose_count-1} {((len(self.timeline))/(self.pose_count-1))*100:.2f}% ({self.get_bag_size()})"
+            return f"Recording {self.pose_name}|{len(self.timeline)-1}/{self.pose_count-1} ({self.get_bag_size()})"
  
     def set_parameters(self, save_location, name, range):
+        #set main focus to the main window ,and maximize it (not fullscreen)
+        self.focus_set()
+        self.attributes('-zoomed', True)
+
+        
         print("Setting parameters...")
         self.save_location = save_location
         self.name = name
