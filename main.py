@@ -87,7 +87,7 @@ class SubWindow(tk.Toplevel):
         self.input_menu = tk.Menu(self)
 
         self.option_menu.add_command(label="Check missing", command=self.check_missing)
-        self.option_menu.add_command(label="Wipe data", command=self.bui)
+        self.option_menu.add_command(label="Wipe data", command=self.wipe_data)
         self.option_menu.add_command(label="Exit", command=self.exit)
 
         self.config_menu.add_command(label="Open config file", command=self.open_config_file)
