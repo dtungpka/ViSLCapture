@@ -11,3 +11,4 @@ rs_rgb_resolution:
 - 640
 - 480
 save_location: D:\2023-2024\Project\Realsense\output
+start_person: 10

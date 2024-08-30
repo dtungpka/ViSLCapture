@@ -7,18 +7,22 @@ import pyrealsense2 as rs
 import numpy as np
 import os
 import time
-import sys
+import argparse
 import yaml
+import shutil
 
 
-VERSION = "1.1.2"
+VERSION = "1.2.0-alpha"
 
 class Config:
     running = True
     config_file_path = "config/config.yaml"
     config = None
-    def __init__(self):
+    def __init__(self, config_file=None, action_map=None) :
         #if config file is not None, load the config file, else create a new one
+        if config_file is not None:
+            Config.config_file_path = config_file
+        
         if os.path.exists(Config.config_file_path): 
             Config.load()
         else:
@@ -26,15 +30,21 @@ class Config:
                 "save_location": os.path.join(os.getcwd(), "output"),
                 "name": "A0P0",
                 "range": 10,
-                "icon": "config/Nahida_2.ico",
+                "icon": "_internal/Nahida_2.ico",
                 "action_map": "config/maps.txt",
                 "rs_rgb_resolution": [640,480],
                 "rs_depth_resolution": [640,480],
                 "rs_rgb_fps": 30,
                 "rs_depth_fps": 30,
-                "start_person": 0,
+                "start_person": 0
             }
-            Config.save()
+        if action_map is not None:
+            Config.config["action_map"] = action_map
+
+        #check action map file if exist, then copy to _internal
+        if os.path.exists(Config.config["action_map"]):
+            shutil.copyfile(Config.config["action_map"],os.path.join('_internal',os.path.basename(Config.config["action_map"])))
+        Config.save()
     def save():
         with open(Config.config_file_path, "w",encoding='utf-8') as f:
             yaml.dump(Config.config, f, default_flow_style=False)
@@ -59,7 +69,49 @@ class SubWindow(tk.Toplevel):
         self.iconbitmap(Config.get("icon"))
         self.geometry("400x200")  # Set the desired dimensions
         self.resizable(False, False)  # Disable resizing
+
+        self.manual_id_inputed = False
+        self.manual_action_name_inputed = False
+
+        #Toolbar menu with: Options, Config, Map
+        #Option with:Wipe data, Exit
+        #Config with: Open config file, Open config folder
+        #Map with: Open map file, Reset map file, Get online map file
+
+        # Create the widgets
         self.parent = parent
+
+        self.option_menu = tk.Menu(self)
+        self.config_menu = tk.Menu(self)
+        self.map_menu = tk.Menu(self)
+        self.input_menu = tk.Menu(self)
+
+        self.option_menu.add_command(label="Check missing", command=self.check_missing)
+        self.option_menu.add_command(label="Wipe data", command=self.bui)
+        self.option_menu.add_command(label="Exit", command=self.exit)
+
+        self.config_menu.add_command(label="Open config file", command=self.open_config_file)
+        self.config_menu.add_command(label="Open config folder", command=self.open_config_folder)
+
+        self.map_menu.add_command(label="Open map file", command=self.open_map_file)
+        self.map_menu.add_command(label="Overwrite map file", command=self.overwrite_map_file)
+        self.map_menu.add_command(label="Reset map file", command=self.reset_map_file)
+        self.map_menu.add_command(label="Get online map file", command=self.get_online_map_file)
+
+        self.input_menu.add_command(label="Reset ID", command=self.reset_id, accelerator="Ctrl+R")
+        self.input_menu.add_command(label="Reset Action Name", command=self.reset_action_name, accelerator="Ctrl+E")
+
+        self.menu_bar = tk.Menu(self)
+        self.menu_bar.add_cascade(label="Options", menu=self.option_menu)
+        self.menu_bar.add_cascade(label="Config", menu=self.config_menu)
+        self.menu_bar.add_cascade(label="Map", menu=self.map_menu)
+        self.menu_bar.add_cascade(label="Input field", menu=self.input_menu)
+
+        self.config(menu=self.menu_bar)
+
+
+
+
         default_save_location = Config.get("save_location")
         if os.path.exists(default_save_location):
             self.datas = os.listdir(default_save_location)
@@ -115,8 +167,12 @@ class SubWindow(tk.Toplevel):
                 self.name_entry.insert(0, f"A{last_action}P{last_person+1}")
 
         #add trigger to action_name_entry and name_entry when value is changed
-        self.action_name_entry.bind("<KeyRelease>",self.update_action_name)
+        self.action_name_entry.bind("<KeyRelease>",self.update_id)
         self.name_entry.bind("<KeyRelease>",self.update_name)
+
+        #shortcuts
+        self.bind("<Control-r>", self.reset_id)
+        self.bind("<Control-e>", self.reset_action_name)
             
 
 
@@ -136,17 +192,110 @@ class SubWindow(tk.Toplevel):
         self.confirm_button.pack()
 
         self.update_name(None)
-        self.update_action_name(None)
+        self.update_id(None)
 
         #move the window to the center of the screen
         self.update()
         self.geometry(f"+{int(self.winfo_screenwidth()/2 - self.winfo_width()/2)}+{int(self.winfo_screenheight()/2 - self.winfo_height()/2)}")
         self.update()
 
+    def wipe_data(self):
+        #ask for confirmation, if yes, delete the content of the save location
+        result = messagebox.askquestion("Wipe data", "Are you sure you want to wipe data?")
+        if result == 'yes':
+            shutil.rmtree(Config.get("save_location"))
+            os.makedirs(Config.get("save_location"))
+            self.datas = os.listdir(Config.get("save_location"))
+            messagebox.showinfo("Wipe data","Wipe data completed!")
+        self.focus_set()
+
+
+    def exit(self):
+        Config.running = False
+        self.parent.stop()
+
+    def open_config_file(self):
+        #check if full path, if not then add full path
+        temp_path = Config.config_file_path
+        if not ':' in temp_path:
+            temp_path = os.path.join(os.getcwd(),temp_path)
+
+        os.startfile(temp_path)
+
+    def open_config_folder(self):
+        os.startfile(os.path.dirname(Config.config_file_path))
+
+    def open_map_file(self):
+        temp_path = Config.get("action_map")
+        if not ':' in temp_path:
+            temp_path = os.path.join(os.getcwd(),temp_path)
+        os.startfile(temp_path)
+
+    def overwrite_map_file(self):
+        file = filedialog.askopenfile(mode='r', filetypes=[('Map Files','*.txt')])
+        if file is None:
+            return
+        shutil.copyfile(file.name,Config.config["action_map"])
+        shutil.copyfile(Config.config["action_map"],os.path.join('_internal',os.path.basename(Config.config["action_map"])))
+
+        #show messagebox: Map file overwritten:.... and list content of the file
+        with open(Config.config["action_map"], "r",encoding='utf-8') as f:
+            content = f.read()
+        messagebox.showinfo("Overwrite map file",f"Map file overwritten: {file.name}\n" + content)
+        self.actions_list = {}
+        self.focus_set()
+
+    def reset_map_file(self):
+        shutil.copyfile(os.path.join('_internal',os.path.basename(Config.config["action_map"])),Config.config["action_map"])
+        messagebox.showinfo("Reset map file","Reset map file completed!")
+        self.focus_set()
+
+    def get_online_map_file(self):
+        link = "https://daihocphenikaa-my.sharepoint.com/:f:/g/personal/21010294_st_phenikaa-uni_edu_vn/EklmQosvwLJImilJ2m2gz-4BdsznPj8e3DvosIE-VXDi2A?e=kE7eHT"
+        os.startfile(link)
+
+    def check_missing(self):
+        missing_record = []
+        _from_person = 999
+        _to_person = 0
+        for data in self.datas:
+            if os.path.isdir(os.path.join(Config.get("save_location"),data)):
+                _action,_person = data.replace('A','').split("P")
+                #convert to int
+                _action = int(_action)
+                _person = int(_person)
+                _from_person = min(_from_person,_person)
+                _to_person = max(_to_person,_person)
+        available_action = set([data.split("P")[0] for data in self.datas])
+        for action_ID in available_action:
+            for person in range(_from_person,_to_person+1):
+                if not os.path.exists(os.path.join(Config.get("save_location"),f"{action_ID}P{person}")):
+                    missing_record.append(f"{action_ID}P{person}: {self.actions_list[action_ID]}")
+        
+        if len(missing_record) == 0:
+            messagebox.showinfo("Check missing","No missing record found!")
+        else:
+            messagebox.showinfo("Check missing",f"{len(missing_record)} missing record found!\n" + "\n".join(missing_record))
+        #focus to the subwindow
+        self.focus_set()
+
+
+    def reset_id(self,event=None):
+        self.manual_id_inputed = False
+        self.update_id(None)
+
+    def reset_action_name(self,event=None):
+        self.manual_action_name_inputed = False
+        action_name = self.load_action_name()
+        self.action_name_entry.delete(0,tk.END)
+        self.action_name_entry.insert(0,action_name)
+
+
 
     def load_action_name(self):
         if self.actions_list == {}:
-            with open(Config.get("action_map"), "r",encoding='utf-8') as f:
+            with open(Config.get("action_map"), "r",encoding='utf-8') as file:
+                f = [line for line in file if '=>' in line]
                 for line in f:
                     action, name = line.strip().split(" => ")
                     self.actions_list[action] = name
@@ -159,14 +308,27 @@ class SubWindow(tk.Toplevel):
         return action_name
     
     def update_name(self,event): #name of action A00P00
+        if event:
+            self.manual_id_inputed = True   
+        if self.manual_action_name_inputed:
+            self.manual_action_name_inputed = True
+            return
+            
 
         action_name = self.load_action_name()
         if action_name == '[Insert action]' and self.action_name_entry.get() != '[Insert action]' and not  self.action_name_entry.get() in self.actions_list.values():
             action_name = self.action_name_entry.get()
-        self.action_name_entry.delete(0,tk.END)
-        self.action_name_entry.insert(0,action_name)
+        else:
+            self.action_name_entry.delete(0,tk.END)
+            self.action_name_entry.insert(0,action_name)
 
-    def update_action_name(self,event): #name of action [Insert action]
+    def update_id(self,event): #name of action [Insert action]
+        if event:
+            self.manual_action_name_inputed = True
+        if self.manual_id_inputed:
+            self.manual_id_inputed = True
+            return
+
         actionID = None
         action = None
         for action, name in self.actions_list.items():
@@ -208,15 +370,15 @@ class SubWindow(tk.Toplevel):
     def confirm(self):
         if Config.get("start_person") == 0:
             Config.set("start_person",int(self.name_entry.get().split("P")[1]))
-
-        self.parent.set_parameters(self.save_location_entry.get(), self.name_entry.get(), self.range_entry.get())
         self.save_action_name()
         #close the window
         Config.save()
+        self.parent.set_parameters(self.save_location_entry.get(), self.name_entry.get(), self.range_entry.get())
+        
         self.destroy()
 
 class MainWindow(tk.Tk):
-    def __init__(self):
+    def __init__(self,debug=False):
         super().__init__()
         self.title("ViSL Capture" + " v" + VERSION)
         self.iconbitmap(Config.get("icon"))
@@ -227,6 +389,13 @@ class MainWindow(tk.Tk):
         
         self.depth_frame = tk.Label(self, width=640, height=480)
         self.depth_frame.grid(row=0, column=1, sticky="nsew")
+
+        #exit menu btn
+        self.menu_bar = tk.Menu(self)
+        self.menu_bar.add_command(label="Exit", command=self.stop)
+        self.config(menu=self.menu_bar)
+
+        
         
 
 
@@ -465,10 +634,18 @@ class MainWindow(tk.Tk):
         self.set_timeline_keypoint(self.current_frame,"discard",self.current_timestamp)
         pass
 
+
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="ViSL Capture")
+    parser.add_argument("--config",'-c', help="Path to the configuration file",default="config/config.yaml")
+    parser.add_argument("--action_map",'-m', help="Path to the action map file",default="config/maps.txt")
+    parser.add_argument("--debug",'-d', help="Debug mode",type=bool,default=False)
+    args = parser.parse_args()
+
     while Config.running:
-        Config()
-        window = MainWindow()
+        Config(args.config,args.action_map)
+        window = MainWindow(debug=args.debug)
         subwindow = SubWindow(window)
         subwindow.mainloop()
         Config.save()
