@@ -235,6 +235,9 @@ class SubWindow(tk.Toplevel):
         file = filedialog.askopenfile(mode='r', filetypes=[('Map Files','*.txt')])
         if file is None:
             return
+        #if file exist, rename the old file to old_*
+        if os.path.exists(Config.config["action_map"]):
+            shutil.move(Config.config["action_map"],os.path.join(os.path.dirname(Config.config["action_map"]),"old_" + os.path.basename(Config.config["action_map"])))
         shutil.copyfile(file.name,Config.config["action_map"])
         shutil.copyfile(Config.config["action_map"],os.path.join('_internal',os.path.basename(Config.config["action_map"])))
 
